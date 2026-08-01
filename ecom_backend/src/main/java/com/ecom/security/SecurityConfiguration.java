@@ -39,24 +39,26 @@ public class SecurityConfiguration {
 		 * 3.3 remaining all end points - only authentication required
 		 */
 		http.authorizeHttpRequests(request -> request
-				.requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html")
-				.permitAll()
-				.requestMatchers("/api/auth/**")
-				.permitAll()
-				.requestMatchers(HttpMethod.GET, "/api/categories/**", "/api/products/**")
-				.permitAll()
-				.requestMatchers("/api/admin/**")
-				.hasRole("ADMIN")
-				// category/product mutations live under /api/categories, /api/products (not /api/admin/**) - lock down to ADMIN
-				.requestMatchers(HttpMethod.POST, "/api/categories/**", "/api/products/**")
-				.hasRole("ADMIN")
-				.requestMatchers(HttpMethod.PUT, "/api/categories/**", "/api/products/**")
-				.hasRole("ADMIN")
-				.requestMatchers(HttpMethod.PATCH, "/api/products/**")
-				.hasRole("ADMIN")
-				.requestMatchers(HttpMethod.DELETE, "/api/categories/**", "/api/products/**")
-				.hasRole("ADMIN")
-				.anyRequest().authenticated());
+                // CORS preflight
+                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+
+                // Unified single-entry auth - register/login, no separate admin login
+                .requestMatchers("/auth/**").permitAll()
+
+                // Swagger / OpenAPI
+                .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+
+                // Public, guest-accessible catalog browsing
+                .requestMatchers(HttpMethod.GET, "/categories/**", "/products/**").permitAll()
+
+                // Everything under /admin/** requires ROLE_ADMIN (categories/products/orders/users/dashboard
+                // management all live here - see Admin*Controller classes)
+                .requestMatchers("/admin/**").hasRole("ADMIN")
+
+                // Every other endpoint (cart, addresses, checkout, orders, users/profile)
+                // just requires a signed-in user, customer or admin
+                .anyRequest().authenticated());
+		
 		// 4. Plug in the JWT filter before Spring Security's own auth filter
 		http.addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 		return http.build();
