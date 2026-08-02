@@ -9,10 +9,9 @@ import com.ecom.entities.UserEntity;
 public interface UserRepository extends JpaRepository<UserEntity, Long> {
 	// check if user already exists by email or username - to reject dup signup
 	boolean existsByEmailOrUserName(String email, String userName);
-	
+
 	boolean existsByEmail(String email);
 
-	boolean existsByUserName(String userName);
 	// used by CustomUserDetailsService to load user for authentication
 	Optional<UserEntity> findByEmail(String email);
 }
