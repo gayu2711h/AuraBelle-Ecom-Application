@@ -10,4 +10,6 @@ public interface ProductService
 
 	ProductDto createProduct(@Valid ProductRequest request);
 
+	ProductDto updateProductImage(Long id, String imageUrl);
+
 }

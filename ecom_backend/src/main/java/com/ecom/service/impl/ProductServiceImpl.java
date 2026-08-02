@@ -64,5 +64,14 @@ public class ProductServiceImpl implements ProductService
 
         return toDto(productRepository.save(product));		
 	}
+
+	@Transactional
+	@Override
+	public ProductDto updateProductImage(Long id, String imageUrl) {
+        Product product = productRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Product", "id", id));
+        product.setImage(imageUrl);
+        return toDto(productRepository.save(product));
+	}
     
 }
