@@ -1,5 +1,7 @@
 package com.ecom.security;
 
+import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -10,35 +12,55 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
-import lombok.RequiredArgsConstructor;
+import java.util.Arrays;
+import java.util.List;
 
-@Configuration // declares java config class - to declare spring beans
-@EnableWebSecurity // to enable spring web security
-@EnableMethodSecurity // to enable method level authorization rules (@PreAuthorize)
+// NOTE: all paths below are relative to the app's context-path (/api, set in
+// application.properties) - e.g. the "/auth/**" matcher covers /api/auth/**.
+@Configuration
+@EnableWebSecurity
+@EnableMethodSecurity // enables @PreAuthorize on the Admin*Controller classes
 @RequiredArgsConstructor
 public class SecurityConfiguration {
 
-	private final CustomUserDetailsServiceImpl userDetailsService;
-	private final JwtAuthFilter jwtAuthFilter;
+    private final UserDetailsService userDetailsService;
+    private final JwtAuthFilter jwtAuthFilter;
+    private final JwtAuthEntryPoint jwtAuthEntryPoint;
+    private final RestAccessDeniedHandler restAccessDeniedHandler;
 
-	@Bean
-	SecurityFilterChain customizeSecurityFilterChain(HttpSecurity http) throws Exception {
-		// 1. disable CSRF protection - stateless JSON API, no cookies/session
-		http.csrf(csrf -> csrf.disable());
-		// 2. Disable HttpSession creation - auth state is carried in the JWT, per request
-		http.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
-		/*
-		 * 3. Define URL based authorization rules
-		 * 3.1 public end points - swagger , register , login , browse catalog
-		 * 3.2 /admin/** - ROLE_ADMIN only
-		 * 3.3 remaining all end points - only authentication required
-		 */
-		http.authorizeHttpRequests(request -> request
+    @Value("${app.cors.allowed-origins}")
+    private String allowedOrigins;
+
+    @Bean
+    SecurityFilterChain customizeSecurityFilterChain(HttpSecurity http) throws Exception {
+
+        // Disable CSRF because we are building a stateless REST API
+        http.csrf(csrf -> csrf.disable());
+
+        // Allow the React frontend (different origin) to call this API
+        http.cors(cors -> cors.configurationSource(corsConfigurationSource()));
+
+        // Do not create Http Session - JWT is stateless
+        http.sessionManagement(session ->
+                session.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
+
+        // Consistent JSON error bodies for 401 / 403, picked up by the frontend
+        // to show the login modal/prompt (per spec section 2)
+        http.exceptionHandling(ex -> ex
+                .authenticationEntryPoint(jwtAuthEntryPoint)
+                .accessDeniedHandler(restAccessDeniedHandler));
+
+        http.authorizeHttpRequests(request -> request
+
                 // CORS preflight
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
@@ -58,35 +80,42 @@ public class SecurityConfiguration {
                 // Every other endpoint (cart, addresses, checkout, orders, users/profile)
                 // just requires a signed-in user, customer or admin
                 .anyRequest().authenticated());
-		
-		// 4. Plug in the JWT filter before Spring Security's own auth filter
-		http.addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
-		return http.build();
-	}
 
-	/*
-	 * Configure Password encoder bean
-	 * - BCryptPasswordEncoder - SHA with salt
-	 */
-	@Bean
-	PasswordEncoder passwordEncoder() {
-		return new BCryptPasswordEncoder();
-	}
+        // Validate the JWT on every request before Spring's own auth filter runs
+        http.addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
-	/*
-	 * DaoAuthenticationProvider - ties together UserDetailsService + PasswordEncoder
-	 * so the AuthenticationManager can verify email/password on login
-	 */
-	@Bean
-	DaoAuthenticationProvider authenticationProvider() {
-		DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
-		provider.setUserDetailsService(userDetailsService);
-		provider.setPasswordEncoder(passwordEncoder());
-		return provider;
-	}
+        return http.build();
+    }
 
-	@Bean
-	AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
-		return config.getAuthenticationManager();
-	}
+    @Bean
+    CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration configuration = new CorsConfiguration();
+        configuration.setAllowedOrigins(Arrays.asList(allowedOrigins.split(",")));
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
+        configuration.setAllowedHeaders(List.of("*"));
+        configuration.setExposedHeaders(List.of("Authorization"));
+        configuration.setAllowCredentials(true);
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuration);
+        return source;
+    }
+
+    @Bean
+    PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+
+    @Bean
+    DaoAuthenticationProvider authenticationProvider() {
+        DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
+        provider.setUserDetailsService(userDetailsService);
+        provider.setPasswordEncoder(passwordEncoder());
+        return provider;
+    }
+
+    @Bean
+    AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
+        return config.getAuthenticationManager();
+    }
 }
