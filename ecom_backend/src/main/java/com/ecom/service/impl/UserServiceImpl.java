@@ -1,28 +1,26 @@
-package com.ecom.service;
+package com.ecom.service.impl;
 
 import org.modelmapper.ModelMapper;
-<<<<<<< HEAD
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.springframework.security.authentication.BadCredentialsException;
 import com.ecom.custom_exceptions.ApiException;
 import com.ecom.custom_exceptions.ResourceNotFoundException;
+import com.ecom.dto.response.JwtResponse;
+import com.ecom.dtos.request.SigninRequest;
 import com.ecom.dtos.request.SignupRequest;
 import com.ecom.dtos.response.UserDto;
 import com.ecom.entities.Cart;
 import com.ecom.entities.UserEntity;
 import com.ecom.enums.Role;
 import com.ecom.repository.CartRepository;
-=======
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import com.ecom.custom_exceptions.ResourceNotFoundException;
-import com.ecom.dtos.response.UserDto;
-import com.ecom.entities.UserEntity;
->>>>>>> e2deeeca1c134b0c159ae3d09deab3c342bd29ae
 import com.ecom.repository.UserRepository;
+import com.ecom.security.JwtUtils;
+import com.ecom.service.UserService;
 
 import lombok.RequiredArgsConstructor;
 
@@ -33,19 +31,10 @@ public class UserServiceImpl implements UserService {
 	
 	private final UserRepository userRepository;
 	private final ModelMapper modelMapper;
-	
-	@Override
-	public UserDto getProfile(String email) {
-	 UserEntity user = userRepository.findByEmail(email)
-             .orElseThrow(() -> new ResourceNotFoundException("User", "email", email));
-      return modelMapper.map(user, UserDto.class);
-	}
-
-    private final PasswordEncoder passwordEncoder;
-	private final UserRepository userRepository;
 	private final CartRepository cartRepository;
-	private final ModelMapper modelMapper;
-
+	private final PasswordEncoder passwordEncoder;
+	private final AuthenticationManager authenticationManager;
+	private final JwtUtils jwtUtil;
 	
 	@Override
 	public UserDto getProfile(String email) {
@@ -77,6 +66,25 @@ public class UserServiceImpl implements UserService {
         cartRepository.save(cart);
 
         return modelMapper.map(saved, UserDto.class);
+	}
+
+	@Override
+	public JwtResponse signin(SigninRequest request) {
+		try {
+            authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword()));
+                  System.out.println("Authentication Successfull");
+        } catch (Exception ex) {
+            throw new BadCredentialsException("Invalid email or password");
+        }
+
+        UserEntity user = userRepository.findByEmail(request.getEmail())
+                .orElseThrow(() -> new ResourceNotFoundException("User", "email", request.getEmail()));
+
+        String token = jwtUtil.generateToken(user.getEmail(), user.getRole().name(), user.getUserId());
+
+        System.out.println("generated Token :"+token);
+        return new JwtResponse(token, user.getUserId(), user.getUserName(), user.getEmail(), user.getRole().name());
 	}
 
 }

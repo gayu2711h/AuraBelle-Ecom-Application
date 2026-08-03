@@ -7,6 +7,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+
+import com.ecom.dtos.request.SigninRequest;
 import com.ecom.dtos.request.SignupRequest;
 import com.ecom.dtos.response.ApiResponse;
 import com.ecom.service.UserService;
@@ -25,4 +27,11 @@ public class AuthController {
     public ResponseEntity<ApiResponse<?>> register(@Valid @RequestBody SignupRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(userService.signup(request)));
     }
+	
+	@PostMapping("/login")
+    public ResponseEntity<ApiResponse<?>> login(@Valid @RequestBody SigninRequest request) {
+		System.out.println("===========Login Controller===========");
+        return ResponseEntity.ok(ApiResponse.success(userService.signin(request)));
+    }
+
 }
